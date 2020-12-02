@@ -14,14 +14,13 @@
     "removeComments": true,
     "sourceMap": false,
     "strict": true,
-    "target": "es2017",
+    "target": "es5",
     "skipLibCheck": true,
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
     "resolveJsonModule": true,
-    "declaration": true,
-    "outDir": "dist"
+    "jsx": "react"
   },
   "include": ["src"]
 }
