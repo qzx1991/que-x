@@ -34,7 +34,7 @@ export class RenderProcess {
 
   renderAsComponent() {
     const Com = this.factory.component as typeof Component;
-    const instance = new Com(this.factory.propsProcess.getProps());
+    const instance = new Com(this.factory.propsProcess.getProp());
     this.process = new Processable(() =>
       this.patchResult(this.formatResult(instance.render()))
     );
@@ -61,7 +61,7 @@ export class RenderProcess {
       isR2Factory &&
       (r1 as XFactory).id === (r2 as XFactory).id
     ) {
-      this.factory.propsProcess.updateTransformedProps(
+      this.factory.propsProcess.updateTransformProps(
         (r2 as XFactory).transformedProps
       );
       // 结果一样不能说明什么 children 和 props可能完全不一样

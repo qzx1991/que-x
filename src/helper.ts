@@ -38,3 +38,19 @@ export function replaceDoms(doms: HTMLElement[], elements: HTMLElement[]) {
     }
   }
 }
+
+export function diffSet(s1: Set<string>, s2: Set<string>) {
+  const added: string[] = [];
+  const deleted: string[] = [];
+  s1.forEach((property) => {
+    if (!s2.has(property)) {
+      deleted.push(property);
+    }
+    s2.delete(property);
+  });
+  s2.forEach((property) => added.push(property));
+  return {
+    added,
+    deleted,
+  };
+}
