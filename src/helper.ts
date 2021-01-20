@@ -1,3 +1,4 @@
+import { XDomPosition, XClassType, XStyleType } from "./interface";
 /**
  * 将复杂的数组对象转换成一维数组
  * @param data 需要被打平的对象
@@ -23,17 +24,33 @@ export function flatternDeep<T>(data: T[], recrusive = true): any[] {
  * @param elements 新加的节点
  */
 export function replaceDoms(doms: HTMLElement[], elements: HTMLElement[]) {
-  const dom = doms[doms.length - 1];
+  const position = getDomPositionInfo(doms, true);
+  insertElements(elements, position);
+}
+
+export function getDomPositionInfo(
+  elements: HTMLElement[],
+  shouldRemove = false
+): XDomPosition {
+  const dom = elements[elements.length - 1];
   const nextSibling = dom.nextSibling || dom.nextElementSibling;
-  const parentDom = (dom as any).parent || dom.parentNode;
-  // dom.remove();
-  doms.forEach((i) => i.remove());
-  if (!nextSibling) {
-    elements.forEach((ele) => parentDom.appendChild(ele));
+  const parent = (dom as any).parent || dom.parentNode;
+  if (shouldRemove) {
+    elements.forEach((i) => i.remove());
+  }
+  return {
+    parent,
+    nextSibling,
+  };
+}
+
+export function insertElements(elements: HTMLElement[], info: XDomPosition) {
+  if (!info.nextSibling) {
+    elements.forEach((ele) => info.parent.appendChild(ele));
   } else {
-    let tDom = nextSibling;
+    let tDom = info.nextSibling;
     for (let i = elements.length - 1; i >= 0; i--) {
-      parentDom?.insertBefore(elements[i], tDom);
+      info.parent?.insertBefore(elements[i], tDom);
       tDom = elements[i];
     }
   }
@@ -53,4 +70,51 @@ export function diffSet(s1: Set<string>, s2: Set<string>) {
     added,
     deleted,
   };
+}
+
+export function isPrivateProperty(property: string) {
+  return /^_+/gi.test(property);
+}
+
+export function isEventProperty(property: string) {
+  return /^on/gi.test(property);
+}
+
+export function isClassProperty(property: string) {
+  return property === "className";
+}
+export function isStyleProperty(property: string) {
+  return property === "style";
+}
+
+function className(classname: XClassType): string | undefined {
+  if (!classname) return;
+  if (typeof classname === "string") {
+    return classname;
+  }
+  if (Array.isArray(classname)) {
+    return classname
+      .map(className)
+      .filter((c) => c)
+      .join(" ");
+  }
+  return className(
+    Object.keys(classname)
+      .filter((prop) => classname[prop])
+      .map((prop) => prop)
+  );
+}
+
+export function getClassValue(...classnames: XClassType[]) {
+  return className(classnames.map(className));
+}
+
+export function getStyleValue(value: XStyleType) {
+  if (typeof value === "string") return value;
+  if (typeof value === "object") {
+    return Object.keys(value)
+      .map((key) => `${key}:${value[key]}`)
+      .join(";");
+  }
+  return "";
 }

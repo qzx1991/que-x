@@ -1,5 +1,5 @@
 import XFactory from "./Factory";
-import { replaceDoms, flatternDeep } from "./helper";
+import { flatternDeep } from "./helper";
 import Component from "./Component";
 import { isCompnent } from "./Component";
 import {
@@ -8,7 +8,7 @@ import {
   XNode,
   XTransformedValue,
 } from "./interface";
-export * from "que-proxyable";
+export * from "./proxyable";
 
 /**
  * 对外暴露的对象
@@ -27,7 +27,7 @@ class X {
       throw new Error("请指定正确的DOM节点");
     }
     xnode.exec();
-    xnode.renderProcess.replaceDoms([element]);
+    // xnode.renderProcess.replaceDoms([element]);
   }
 
   // 新建组件

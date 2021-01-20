@@ -1,7 +1,17 @@
 import { XNode, XProps } from "./interface";
 export default class Component<P = {}> {
   _$$_$$_IS_COMPONENT = true;
-  constructor(public props: XProps<P>) {}
+  constructor(public props: XProps<P>) {
+    this.created();
+  }
+
+  created() {}
+  mounted() {}
+
+  willUnmount() {}
+
+  unmounted() {}
+
   render(): XNode {
     // this.props.children.map();
     return "";

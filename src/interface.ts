@@ -1,7 +1,7 @@
 import XFactory from "./Factory";
 import Component from "./Component";
 
-export type XFunctionalComponent = () => XNode;
+export type XFunctionalComponent<T = any> = (prop: T) => XNode;
 
 export type XNode = XFactory | string | number | boolean | undefined;
 
@@ -25,3 +25,17 @@ export interface XTransformedPropsData {
 export type XProps<P = {}> = P & {
   children: XNode[];
 };
+
+export type XDomPosition = {
+  parent: any;
+  nextSibling?: ChildNode | null;
+};
+
+export type XClassType =
+  | string
+  | undefined
+  | (string | undefined | { [prop: string]: boolean })[]
+  | { [prop: string]: boolean };
+export type XStyleType = string | { [prop: string]: number | string };
+
+export type XChildResult = XNode | XNode[];
