@@ -85,8 +85,8 @@ export function isProxyableData(data: any) {
   return data && typeof data === "object" && data[PROXYABLE_FLAG];
 }
 
-export function getOriginData(data: any) {
-  return (data && data[ORIGIN_TARGET_FLAG]) || data;
+export function getOriginData<T>(data: T): T {
+  return (data && (data as any)[ORIGIN_TARGET_FLAG]) || data;
 }
 
 export function hasProxy(data: any) {

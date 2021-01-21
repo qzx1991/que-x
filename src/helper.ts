@@ -18,6 +18,19 @@ export function flatternDeep<T>(data: T[], recrusive = true): any[] {
   return res;
 }
 
+export function appendElements(
+  parentElemet: HTMLElement,
+  children: (HTMLElement | HTMLElement[])[]
+) {
+  children.forEach((child) => {
+    if (Array.isArray(child)) {
+      appendElements(parentElemet, child);
+    } else {
+      parentElemet.append(child);
+    }
+  });
+}
+
 /**
  *
  * @param doms 需要被替换的dom节点
@@ -25,14 +38,16 @@ export function flatternDeep<T>(data: T[], recrusive = true): any[] {
  */
 export function replaceDoms(doms: HTMLElement[], elements: HTMLElement[]) {
   const position = getDomPositionInfo(doms, true);
+  if (!position) return;
   insertElements(elements, position);
 }
 
 export function getDomPositionInfo(
   elements: HTMLElement[],
   shouldRemove = false
-): XDomPosition {
+): XDomPosition | undefined {
   const dom = elements[elements.length - 1];
+  if (!dom) return undefined;
   const nextSibling = dom.nextSibling || dom.nextElementSibling;
   const parent = (dom as any).parent || dom.parentNode;
   if (shouldRemove) {
@@ -45,6 +60,7 @@ export function getDomPositionInfo(
 }
 
 export function insertElements(elements: HTMLElement[], info: XDomPosition) {
+  if (!info) return;
   if (!info.nextSibling) {
     elements.forEach((ele) => info.parent.appendChild(ele));
   } else {

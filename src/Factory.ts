@@ -14,6 +14,7 @@ import {
 } from "./interface";
 import Component from "./Component";
 import { XChildResult } from "./interface";
+import { appendElements } from "./helper";
 import {
   isEventProperty,
   isClassProperty,
@@ -45,26 +46,38 @@ export default class XFactory {
   // 存放process的地方
   processMap = new Map<IXFactoryProcessType, Processable>();
 
+  // 属性处理类
   prop?: Prop;
 
+  // 是否是类组件
   isComponent = false;
+
+  // 是否是原生组件
   isNative = false;
+  // 是否是函数组件
   isFunctional = false;
+  // 是否是fragment组件: 类似<></>这样
   isFragment = false;
+
+  // Component组件和Functional组件的渲染结果
 
   renderResult?: XTransformedNode;
 
-  childrenResult?: XChildResult[];
+  childrenResult: XTransformedNode[] | XTransformedNode[][] = [];
+  // Component组件的实例
 
   componentInstance?: Component;
+  // 原生组件的实例
 
   nativeElement?: HTMLElement;
 
+  // 组件被销毁时所在的位置
   destroyPosition?: {
     nextSibling?: ChildNode | null;
     parent: any;
   };
 
+  // 属性进程 主要是原生组件在渲染属性的时候会用到
   propProcess = new Map<string, Processable>();
 
   constructor(
@@ -73,6 +86,7 @@ export default class XFactory {
     public rawProps: XTransformedPropsData[],
     public rawChildren: XTransformedValue<XChildResult>[]
   ) {
+    const me = this;
     // 支持自定义的组件
     if (typeof component === "string" && SELF_DEFINE_ELEMENT.has(component)) {
       this.component = SELF_DEFINE_ELEMENT.get(component)!;
@@ -86,14 +100,26 @@ export default class XFactory {
     }
 
     this.transformedChildren = rawChildren;
-    this.transformedProps = [
-      {
-        type: XTransformedPropsType.normal,
-        value: () => this.transformedChildren,
-        property: "children",
-      },
-      ...rawProps,
-    ];
+    this.transformedProps = this.isComponentOrFunctional
+      ? [
+          {
+            type: XTransformedPropsType.normal,
+            value: () =>
+              new Proxy(this.transformedChildren, {
+                get(t, k) {
+                  const v = t[k as number];
+                  return typeof v === "function" ? me.transformResult(v()) : v;
+                },
+              }),
+            property: "children",
+          },
+          ...rawProps,
+        ]
+      : rawProps;
+  }
+
+  get isComponentOrFunctional() {
+    return this.isComponent || this.isFunctional;
   }
 
   // 执行
@@ -110,6 +136,8 @@ export default class XFactory {
       this.renderFunction();
     } else if (this.isNative) {
       this.renderNative();
+    } else if (this.isFragment) {
+      this.renderFragment();
     }
   }
 
@@ -119,10 +147,11 @@ export default class XFactory {
     this.processMap.set(
       "render",
       new Processable(() => {
-        this.handleRenderResult(
-          this.transformResult(this.componentInstance?.render()),
-          this.renderResult
-        );
+        const result = this.transformResult(this.componentInstance?.render());
+        if (this.handleRenderResult(result, this.renderResult)) {
+          // 两种结果类型不一样 这个时候肯定要替换原来的值了
+          this.renderResult = result;
+        }
         // 需要注意的是，子进程是先被干掉的 也就是子进程的事件移除实在之前的
         return () => this.unsubscribeRender();
       })
@@ -134,10 +163,10 @@ export default class XFactory {
     this.processMap.set(
       "render",
       new Processable(() => {
-        this.handleRenderResult(
-          this.transformResult(func(this.prop?.getProps())),
-          this.renderResult
-        );
+        const result = this.transformResult(func(this.prop?.getProps()));
+        if (this.handleRenderResult(result, this.renderResult)) {
+          this.renderResult = result;
+        }
         return () => this.unsubscribeRender();
       })
     );
@@ -145,6 +174,7 @@ export default class XFactory {
 
   renderNative() {
     this.nativeElement = document.createElement(this.component as string);
+    // 处理属性
     this.processMap.set(
       "render",
       new Processable(() => {
@@ -158,8 +188,11 @@ export default class XFactory {
         return this.prop?.onPropChange((property, type) => {
           switch (type) {
             case "delete":
+              // 删除的话 要停用原先的进程
               const process = this.propProcess.get(property);
               process?.stop();
+              // 同时还要删除存储的信息
+              this.propProcess.delete(property);
               break;
             case "add":
               this.handleNativeProperty(property, props);
@@ -168,21 +201,55 @@ export default class XFactory {
         });
       })
     );
+    const factory = new XFactory(-2, "fragment", [], this.transformedChildren);
+    factory.exec();
+    // 弄好了就可以插入了呀
+    appendElements(this.nativeElement, factory.getElements() as any);
   }
 
-  renderFragment() {}
+  // 一切的一切都回归到了这里
+  // 我们始终要明白一点：children的数量总是固定的 有什么办法可以避免比较呢
+  renderFragment() {
+    for (let i = 0; i < this.transformedChildren.length; i++) {
+      new Processable(() => {
+        const child = this.transformedChildren[i];
+        const rawResult = child();
+        const result =
+          Array.isArray(rawResult) && this.id === -1
+            ? rawResult.map(this.transformResult)
+            : this.transformResult(rawResult);
+        const originResult = this.childrenResult[i];
+        // 这种情况只出现在虚拟的fragment下 也就是由transformResult生成的fragment下
+        // 这种情况下 比较的就是单纯的数组
+        if (Array.isArray(result)) {
+          // 直接替换  不花里胡哨 如果想花里胡哨 那就用技巧
+          // if (!originResult) {
+          //   this.childrenResult[i] = result;
+          //   result.forEach((i) => (i instanceof XFactory ? i.exec() : i));
+          // } else if (Array.isArray(originResult)) {
+          //   // 直接
+          // } else {
+          //   // ei~~~原住民竟然不是数组 那就别怪我不客气 只能直接替换了
+          //   // 先找到要替换的位置
+          //   let destroyPosition =
+          //     originResult instanceof XFactory
+          //       ? originResult.stop()
+          //       : getDomPositionInfo([origin as any]);
+          //   // 替换呗
+          //   if (destroyPosition) {
+          //     insertElements(this._getElements(result) as any, destroyPosition);
+          //   }
+          //   this.childrenResult[i] = result;
+          // }
+        }
+        // this.handleRenderResult(result, originResult);
+      });
+    }
+  }
 
   handleNativeProperty(property: string, props: any) {
     if (isPrivateProperty(property)) {
       return;
-    } else if (property === "children") {
-      this.propProcess.set(
-        property,
-        new Processable(() => {
-          // this.handleChildren(props[property]);
-          // const children = t
-        })
-      );
     } else if (isEventProperty(property)) {
       // 绑定事件
       this.propProcess.set(
@@ -255,6 +322,10 @@ export default class XFactory {
 
   transformResult(result: XNode): XTransformedNode {
     if (result instanceof XFactory) return result;
+    if (Array.isArray(result)) {
+      // 虚拟出一个XFactory 统一的ID为-1最终将数组类都转到了XFragment下
+      return new XFactory(-1, "fragment", [], [() => result]);
+    }
     if (typeof result === "object") {
       try {
         return new Text(JSON.stringify(result));
@@ -272,14 +343,11 @@ export default class XFactory {
       result.id === origin.id
     ) {
       // ID 一样 表示基因一样 那好了，后面的解构基本就是一样的 唯一不同的可能就是数据了 更新数据让后面的基因自动更新就行
-
       origin.updateChildren(result.rawChildren);
       origin.updateProps(result.rawProps);
-      return;
+      return false;
     }
 
-    // 两种结果类型不一样 这个时候肯定要替换原来的值了
-    this.renderResult = result;
     if (result instanceof XFactory) {
       result.exec();
     }
@@ -287,10 +355,13 @@ export default class XFactory {
       origin instanceof XFactory
         ? origin.stop()
         : getDomPositionInfo([origin as any]);
-    insertElements(
-      result instanceof XFactory ? result.getElements() : ([result] as any),
-      destroyPosition!
-    );
+    if (destroyPosition) {
+      insertElements(
+        result instanceof XFactory ? result.getElements() : ([result] as any),
+        destroyPosition
+      );
+    }
+    return true;
   }
 
   initProps() {
@@ -304,6 +375,13 @@ export default class XFactory {
       )
     );
   }
+  stopProps() {
+    const process = this.processMap.get("props");
+    if (process) {
+      process.stop();
+    }
+    this.processMap.delete("props");
+  }
 
   // 一个组件的解构就像基因一样，自出生之日就确定了
   updateChildren(children: XTransformedValue<XChildResult>[]) {
@@ -316,7 +394,12 @@ export default class XFactory {
   // 同children一样 props的格式在出生之日就固定了
   updateProps(props: XTransformedPropsData[]) {
     // 如此一来，所有的属性都被重新计算了一下 怎么去
-    props.forEach((prop, index) => (this.transformedProps[index + 1] = prop));
+    props.forEach(
+      (prop, index) =>
+        (this.transformedProps[
+          index + (this.isComponentOrFunctional ? 1 : 0)
+        ] = prop)
+    );
   }
 
   stop() {
@@ -324,18 +407,32 @@ export default class XFactory {
     return this.destroyPosition;
   }
 
+  private _getElements(
+    node: XTransformedNode | XTransformedNode[]
+  ): (HTMLElement | Text)[] {
+    if (Array.isArray(node)) {
+      let arr: (HTMLElement | Text)[] = [];
+      node.forEach((i) => this._getElements(i).forEach((j) => arr.push(j)));
+      return arr;
+    } else if (node instanceof XFactory) {
+      return node.getElements();
+    } else {
+      return node ? [node] : [];
+    }
+  }
+
   // 获取这个Xnode包含的所有DOM节点
   getElements(): (HTMLElement | Text)[] {
     if (this.isNative) return [this.nativeElement!];
     if (this.isFragment) {
+      const arr: (HTMLElement | Text)[] = [];
+      for (let i in this.childrenResult) {
+        const child = this.childrenResult[i];
+        this._getElements(child).forEach((j) => arr.push(j));
+      }
+      return arr;
     } else {
-      if (this.renderResult instanceof XFactory) {
-        return this.renderResult.getElements();
-      }
-      if (this.renderResult instanceof Text) {
-        return [this.renderResult];
-      }
+      return this._getElements(this.renderResult);
     }
-    return [];
   }
 }

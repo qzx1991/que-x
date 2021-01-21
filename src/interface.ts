@@ -3,9 +3,15 @@ import Component from "./Component";
 
 export type XFunctionalComponent<T = any> = (prop: T) => XNode;
 
-export type XNode = XFactory | string | number | boolean | undefined;
+export type XNode =
+  | XFactory
+  | string
+  | number
+  | boolean
+  | undefined
+  | Array<XNode>;
 
-export type XTransformedNode = XFactory | Text;
+export type XTransformedNode = XFactory | Text | undefined;
 
 export type XComponent = XFunctionalComponent | typeof Component | string;
 
