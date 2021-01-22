@@ -215,7 +215,7 @@ export default class XFactory {
   // 我们始终要明白一点：children的数量总是固定的 有什么办法可以避免比较呢
   renderFragment() {
     for (let i = 0; i < this.transformedChildren.length; i++) {
-      let map: undefined | Map<number | string, XTransformedNode>;
+      let map: undefined | Map<number | string, XFactory>;
       new Processable(() => {
         const child = this.transformedChildren[i];
         const rawResult = child();
@@ -243,6 +243,7 @@ export default class XFactory {
             parent:
               cursorElements[0].parentNode || cursorElements[0].parentElement,
           };
+          let tempDom: HTMLElement | Text | undefined;
           result.forEach((child) => {
             if (child instanceof XFactory) {
               child.initProps();
@@ -250,10 +251,14 @@ export default class XFactory {
               if (map?.has(key)) {
                 child.stop();
                 // 是不是和游标的key一样？
+                const f = map.get(key);
+                f?.updateChildren(child.rawChildren);
+                f?.updateProps(child.rawProps);
               } else {
               }
             } else {
               insertElement(child, position);
+              tempDom = child;
             }
           });
         } else if (
