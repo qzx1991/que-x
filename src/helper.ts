@@ -49,7 +49,7 @@ export function getDomPositionInfo(
   const dom = elements[elements.length - 1];
   if (!dom) return undefined;
   const nextSibling = dom.nextSibling || dom.nextElementSibling;
-  const parent = (dom as any).parent || dom.parentNode;
+  const parent = dom.parentNode || dom.parentElement;
   if (shouldRemove) {
     elements.forEach((i) => i.remove());
   }
@@ -59,16 +59,28 @@ export function getDomPositionInfo(
   };
 }
 
-export function insertElements(elements: HTMLElement[], info: XDomPosition) {
+export function insertElements(
+  elements: (HTMLElement | Text)[],
+  info: XDomPosition
+) {
   if (!info) return;
   if (!info.nextSibling) {
-    elements.forEach((ele) => info.parent.appendChild(ele));
+    elements.forEach((ele) => ele && info.parent?.append(ele));
   } else {
     let tDom = info.nextSibling;
     for (let i = elements.length - 1; i >= 0; i--) {
-      info.parent?.insertBefore(elements[i], tDom);
+      (info.parent as any)?.insertBefore(elements[i], tDom);
       tDom = elements[i];
     }
+  }
+}
+
+export function insertElement(ele: HTMLElement | Text, info: XDomPosition) {
+  if (!info) return;
+  if (!info.nextSibling) {
+    info.parent?.append(ele);
+  } else {
+    (info.parent as any)?.insertBefore(ele, info.nextSibling);
   }
 }
 

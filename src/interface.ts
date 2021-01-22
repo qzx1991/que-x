@@ -11,7 +11,7 @@ export type XNode =
   | undefined
   | Array<XNode>;
 
-export type XTransformedNode = XFactory | Text | undefined;
+export type XTransformedNode = XFactory | Text;
 
 export type XComponent = XFunctionalComponent | typeof Component | string;
 
@@ -33,10 +33,10 @@ export type XProps<P = {}> = P & {
 };
 
 export type XDomPosition = {
-  parent: any;
+  parent: ParentNode | null;
   nextSibling?: ChildNode | null;
 };
-
+Node;
 export type XClassType =
   | string
   | undefined
@@ -45,3 +45,5 @@ export type XClassType =
 export type XStyleType = string | { [prop: string]: number | string };
 
 export type XChildResult = XNode | XNode[];
+
+export type XTransformedChildResult = XTransformedNode | XTransformedNode[];

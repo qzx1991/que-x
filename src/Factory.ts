@@ -13,8 +13,12 @@ import {
   XFunctionalComponent,
 } from "./interface";
 import Component from "./Component";
-import { XChildResult } from "./interface";
-import { appendElements } from "./helper";
+import {
+  XChildResult,
+  XTransformedChildResult,
+  XDomPosition,
+} from "./interface";
+import { appendElements, insertElement } from "./helper";
 import {
   isEventProperty,
   isClassProperty,
@@ -211,6 +215,7 @@ export default class XFactory {
   // 我们始终要明白一点：children的数量总是固定的 有什么办法可以避免比较呢
   renderFragment() {
     for (let i = 0; i < this.transformedChildren.length; i++) {
+      let map: undefined | Map<number | string, XTransformedNode>;
       new Processable(() => {
         const child = this.transformedChildren[i];
         const rawResult = child();
@@ -218,33 +223,86 @@ export default class XFactory {
           Array.isArray(rawResult) && this.id === -1
             ? rawResult.map(this.transformResult)
             : this.transformResult(rawResult);
+
         const originResult = this.childrenResult[i];
-        // 这种情况只出现在虚拟的fragment下 也就是由transformResult生成的fragment下
-        // 这种情况下 比较的就是单纯的数组
-        if (Array.isArray(result)) {
-          // 直接替换  不花里胡哨 如果想花里胡哨 那就用技巧
-          // if (!originResult) {
-          //   this.childrenResult[i] = result;
-          //   result.forEach((i) => (i instanceof XFactory ? i.exec() : i));
-          // } else if (Array.isArray(originResult)) {
-          //   // 直接
-          // } else {
-          //   // ei~~~原住民竟然不是数组 那就别怪我不客气 只能直接替换了
-          //   // 先找到要替换的位置
-          //   let destroyPosition =
-          //     originResult instanceof XFactory
-          //       ? originResult.stop()
-          //       : getDomPositionInfo([origin as any]);
-          //   // 替换呗
-          //   if (destroyPosition) {
-          //     insertElements(this._getElements(result) as any, destroyPosition);
-          //   }
-          //   this.childrenResult[i] = result;
-          // }
+        /**
+         * 亲 不要担心数组为空的情况 transformResult 为你保驾护航
+         */
+        if (
+          // 有key才有意义
+          map &&
+          map.size > 0 &&
+          Array.isArray(result) &&
+          Array.isArray(originResult)
+        ) {
+          // 这是重点  数组的diff就靠你了
+          let cursor = this.getCursor(0, originResult)!; // 不可能是空的，我保证！
+          const cursorElements = this._getElements(originResult[cursor]);
+          const position: XDomPosition = {
+            nextSibling: cursorElements[0],
+            parent:
+              cursorElements[0].parentNode || cursorElements[0].parentElement,
+          };
+          result.forEach((child) => {
+            if (child instanceof XFactory) {
+              child.initProps();
+              const key = child.prop?.getProps().key;
+              if (map?.has(key)) {
+                child.stop();
+                // 是不是和游标的key一样？
+              } else {
+              }
+            } else {
+              insertElement(child, position);
+            }
+          });
+        } else if (
+          result instanceof XFactory &&
+          originResult instanceof XFactory &&
+          result.id === originResult.id
+        ) {
+          // 如果 这些属性都一样 那就简单了
+          originResult.updateChildren(result.rawChildren);
+          originResult.updateProps(result.rawProps);
+        } else {
+          if (Array.isArray(result)) {
+            map = new Map();
+            result.forEach((i, index) => {
+              if (i instanceof XFactory) {
+                i.exec();
+                const key = i.prop?.getProps().key;
+                if (map?.has(key)) {
+                  console.warn("You flag the same key!!!");
+                }
+                key && map?.set(key, i);
+              }
+            });
+          } else {
+            map = undefined;
+            result instanceof XFactory && result.exec();
+          }
+          this.childrenResult[i] = result;
+          // 销毁旧数据
+          const position = this._destroyChildNode(originResult);
+          if (position) {
+            insertElements(this._getElements(result), position);
+          }
         }
-        // this.handleRenderResult(result, originResult);
       });
     }
+  }
+
+  _destroyChildNode(node?: XTransformedChildResult): XDomPosition | undefined {
+    if (node instanceof XFactory) {
+      return node.stop()!;
+    } else if (Array.isArray(node)) {
+      const res = node.map(this._destroyChildNode);
+      if (res && res.length > 0) {
+        return res[res.length - 1];
+      }
+    }
+    return undefined;
+    // return [];
   }
 
   handleNativeProperty(property: string, props: any) {
@@ -299,16 +357,10 @@ export default class XFactory {
   unsubscribeRender() {
     this.componentInstance?.willUnmount();
     if (!(this.renderResult instanceof XFactory)) {
-      this.destroyPosition = {
-        nextSibling:
-          this.renderResult?.nextSibling ||
-          this.renderResult?.nextElementSibling,
-        parent:
-          (this.renderResult as any).parent ||
-          this.renderResult?.parentNode ||
-          this.renderResult?.parentElement,
-      };
-      this.renderResult?.remove();
+      this.destroyPosition = getDomPositionInfo(
+        [this.renderResult as any],
+        true
+      );
       this.componentInstance?.unmounted();
       return;
     }
@@ -324,6 +376,9 @@ export default class XFactory {
     if (result instanceof XFactory) return result;
     if (Array.isArray(result)) {
       // 虚拟出一个XFactory 统一的ID为-1最终将数组类都转到了XFragment下
+      if (result.length === 0) {
+        return new Text("");
+      }
       return new XFactory(-1, "fragment", [], [() => result]);
     }
     if (typeof result === "object") {
@@ -375,6 +430,7 @@ export default class XFactory {
       )
     );
   }
+
   stopProps() {
     const process = this.processMap.get("props");
     if (process) {
@@ -382,7 +438,6 @@ export default class XFactory {
     }
     this.processMap.delete("props");
   }
-
   // 一个组件的解构就像基因一样，自出生之日就确定了
   updateChildren(children: XTransformedValue<XChildResult>[]) {
     // this.transformedChildren = children;
@@ -432,7 +487,23 @@ export default class XFactory {
       }
       return arr;
     } else {
-      return this._getElements(this.renderResult);
+      return this.renderResult ? this._getElements(this.renderResult) : [];
+    }
+  }
+
+  getCursor(begin: number = 0, arr: XTransformedNode[]) {
+    for (let i = begin; i < arr.length; i++) {
+      const ele = arr[i];
+      if (ele instanceof XFactory) {
+        const key = ele.prop?.getProps().key;
+        if (key) {
+          return i;
+        } else {
+          ele.stop();
+        }
+      } else {
+        ele.remove();
+      }
     }
   }
 }
