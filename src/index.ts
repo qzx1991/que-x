@@ -1,13 +1,16 @@
 import XFactory from "./Factory";
 import { flatternDeep } from "./helper";
-import Component from "./Component";
-import { isCompnent } from "./Component";
+import Component, { isCompnent } from "./Component";
 import {
   XComponent,
   XTransformedPropsData,
   XNode,
   XTransformedValue,
 } from "./interface";
+export * from "./proxyable";
+export * from "./interface";
+export * from "./Component";
+export * from "./util";
 export * from "./proxyable";
 
 /**
