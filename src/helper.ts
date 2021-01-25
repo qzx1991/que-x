@@ -42,14 +42,26 @@ export function replaceDoms(doms: HTMLElement[], elements: HTMLElement[]) {
   insertElements(elements, position);
 }
 
+export function getNextSibling(dom: HTMLElement) {
+  return dom.nextSibling || dom.nextElementSibling;
+}
+
+export function getPreviousSibling(dom: HTMLElement) {
+  return dom.previousSibling || dom.previousElementSibling;
+}
+
+export function getParent(dom: HTMLElement) {
+  return dom.parentNode || dom.parentElement;
+}
+
 export function getDomPositionInfo(
   elements: HTMLElement[],
   shouldRemove = false
 ): XDomPosition | undefined {
   const dom = elements[elements.length - 1];
   if (!dom) return undefined;
-  const nextSibling = dom.nextSibling || dom.nextElementSibling;
-  const parent = dom.parentNode || dom.parentElement;
+  const nextSibling = getNextSibling(dom);
+  const parent = getParent(dom);
   if (shouldRemove) {
     elements.forEach((i) => i.remove());
   }

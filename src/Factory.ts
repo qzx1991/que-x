@@ -18,7 +18,7 @@ import {
   XTransformedChildResult,
   XDomPosition,
 } from "./interface";
-import { appendElements, insertElement } from "./helper";
+import { appendElements, insertElement, getNextSibling } from "./helper";
 import {
   isEventProperty,
   isClassProperty,
@@ -235,32 +235,77 @@ export default class XFactory {
           Array.isArray(result) &&
           Array.isArray(originResult)
         ) {
-          // 这是重点  数组的diff就靠你了
-          let cursor = this.getCursor(0, originResult)!; // 不可能是空的，我保证！
-          const cursorElements = this._getElements(originResult[cursor]);
+          // 这是重点  数组的diff就靠你了  cursor 表示的是从0开始的第一个XFactory节点的位置
+          // 不可能是空的，我保证！能走到这里肯定有数据的
+          let cursor = this.getCursor(0, originResult)!;
+          let cursorFactory = originResult[cursor] as XFactory;
+          let cursorElements = this._getElements(cursorFactory);
+          // 这是第一个dom开始的位置
           const position: XDomPosition = {
             nextSibling: cursorElements[0],
             parent:
               cursorElements[0].parentNode || cursorElements[0].parentElement,
           };
-          let tempDom: HTMLElement | Text | undefined;
-          result.forEach((child) => {
+          const newMap = new Map<number | string, XFactory>();
+          result.forEach((child, index) => {
             if (child instanceof XFactory) {
-              child.initProps();
-              const key = child.prop?.getProps().key;
-              if (map?.has(key)) {
-                child.stop();
-                // 是不是和游标的key一样？
-                const f = map.get(key);
-                f?.updateChildren(child.rawChildren);
-                f?.updateProps(child.rawProps);
-              } else {
+              if (cursor >= 0) {
+                child.initProps();
+                const key = child.prop?.getProps().key;
+
+                if (map?.has(key)) {
+                  // 有对应的key 先停止
+                  child.stop();
+                  // 更新原先的XFactory
+                  const f = map.get(key);
+                  f!.updateChildren(child.rawChildren);
+                  f!.updateProps(child.rawProps);
+                  newMap.set(key, f!);
+                  map.delete(key); // 只能用一次 用完得删了
+                  // 由于使用了之前的XFactory 得进行替换
+                  result[index] = f!;
+                  // 是否是当前游标？不是的话 得插到前面来
+                  if (cursorFactory.prop?.getProps().key === key) {
+                    // 是当前游标 那不用管 游标向后
+                    cursor = this.getCursor(cursor + 1, originResult);
+                    if (cursor < 0) {
+                      position.nextSibling = getNextSibling(
+                        cursorElements[cursorElements.length - 1] as any
+                      );
+                      return;
+                    }
+                    cursorFactory = originResult[cursor] as XFactory;
+                    cursorElements = this._getElements(cursorFactory);
+                    position.nextSibling = cursorElements[0];
+                    position.parent =
+                      cursorElements[0].parentNode ||
+                      cursorElements[0].parentElement;
+                  } else {
+                    // 不是当前游标  这个数据要移过来
+                    f?.insertBefore(position);
+                  }
+                  return;
+                }
               }
+              // 如果游标没了或者没找到对应的原始数据  都会走到这里
+              child.render();
+              child.insertBefore(position);
             } else {
+              // 不是XFactory 直接插
               insertElement(child, position);
-              tempDom = child;
             }
           });
+          // 旧结果中 没有用到的结果要移除掉
+          for (let i = cursor; i < originResult.length; i++) {
+            const ele = originResult[i];
+            if (ele instanceof XFactory) {
+              ele.stop();
+            } else {
+              ele.remove();
+            }
+          }
+          // 新的map替换原来的map方便下次比较
+          map = newMap;
         } else if (
           result instanceof XFactory &&
           originResult instanceof XFactory &&
@@ -272,7 +317,7 @@ export default class XFactory {
         } else {
           if (Array.isArray(result)) {
             map = new Map();
-            result.forEach((i, index) => {
+            result.forEach((i) => {
               if (i instanceof XFactory) {
                 i.exec();
                 const key = i.prop?.getProps().key;
@@ -496,6 +541,13 @@ export default class XFactory {
     }
   }
 
+  // 在某个元素前插入
+  insertBefore(position: XDomPosition) {
+    const elements = this.getElements();
+    elements.forEach((ele) => insertElement(ele, position));
+    return elements;
+  }
+
   getCursor(begin: number = 0, arr: XTransformedNode[]) {
     for (let i = begin; i < arr.length; i++) {
       const ele = arr[i];
@@ -510,5 +562,6 @@ export default class XFactory {
         ele.remove();
       }
     }
+    return -1;
   }
 }
