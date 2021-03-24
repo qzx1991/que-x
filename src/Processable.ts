@@ -56,8 +56,14 @@ function removeRely(process: Processable) {
   });
 }
 export class Processable {
-  constructor(private handler: IProcessableHandler) {
-    this.run(true);
+  get runOnInit() {
+    return this.opt.runOnInit || this.opt.runOnInit === undefined;
+  }
+  constructor(
+    private handler: IProcessableHandler,
+    private opt: { runOnInit?: boolean } = {}
+  ) {
+    this.runOnInit && this.run(true);
   }
   private result: (() => void) | void | undefined;
   private changed: IChangedData = new Map();
@@ -102,3 +108,7 @@ export type IProcessableHandler = (
 ) => void | (() => void);
 
 export type IChangedData = Map<any, Map<"get" | "set" | "delete", Set<string>>>;
+
+export function isFromProcessableArray(d: any) {
+  return true;
+}

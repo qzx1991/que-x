@@ -1,6 +1,7 @@
 import { EventEmitter, IEventEmitterHandler } from "./lib/EventEmitter";
 const STATEABLE_FLAG = Symbol("$STATEABLE_FLAG$");
 const STATEABLE_ORIGIN_FLAG = Symbol("$STATEABLE_ORIGIN_FLAG$");
+// const STATEABLE_STORE = Symbol("$STATEABLE_STORE$");
 let should_emit = true;
 const emitter = new EventEmitter();
 export function isStateableData(data: any) {
@@ -14,10 +15,12 @@ export function Stateable<T>(data: T): T {
   if (type !== "object" || isStateableData(data)) {
     return data;
   }
+  const store = {};
   const proxy = new Proxy(data as Object, {
     get(t, k, r) {
       if (k === STATEABLE_FLAG) return true;
       if (k === STATEABLE_ORIGIN_FLAG) return t;
+      // if (k === STATEABLE_STORE) return store;
       const v = Reflect.get(t, k, r);
       const value = Stateable(v);
 

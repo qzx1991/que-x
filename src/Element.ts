@@ -1,6 +1,8 @@
 import { Component, isComponent } from "./Component";
 import { Processable, IChangedData } from "./Processable";
 import { StateWatcher } from "./Stateable";
+import { Property } from "./Property";
+import { formatResult } from "./utils/ElementUtil";
 export class VirtualElement {
   isComponent = false;
   isFragment = false;
@@ -8,8 +10,9 @@ export class VirtualElement {
   isFunctional = false;
   componentInstance?: Component;
   processes: Processable[] = [];
-  result?: VirtualNode;
   nativeElement?: HTMLElement;
+  prop?: Property;
+  result?: IRenderResult;
   constructor(
     public _component: ComponentType,
     public _props: PropertyType[],
@@ -25,14 +28,16 @@ export class VirtualElement {
       this.componentInstance = new (this._component as typeof Component)(prop);
       this.processes.push(
         new Processable(() => {
-          this.diffResult(this.componentInstance?.render());
+          const result = this.result;
+          this.result = formatResult(this.componentInstance?.render());
+          VirtualElement.diffResult(this.result, result);
         })
       );
     } else if (type === "function") {
       this.isFunctional = true;
       this.processes.push(
         new Processable(() => {
-          this.diffResult((this._component as FComponentType)(prop));
+          // this.diffResult((this._component as FComponentType)(prop));
         })
       );
     } else if (type === "string") {
@@ -108,12 +113,14 @@ export class VirtualElement {
     rely?: IChangedData
   ) {}
   renderChildren(children: IProp["children"]) {}
-  diffResult(result: any) {}
+  static diffResult(resultNew: IRenderResult, resultOld?: IRenderResult) {}
   // 更新
   update(_props: PropertyType[], _children: FunctionalValue[]) {}
-  initProp() {}
+  initProp() {
+    this.prop = new Property(this._props, this._children);
+  }
   getProp(): IProp {
-    return {};
+    return this.prop?.getProp();
   }
 }
 export type VirtualNode = VirtualElement | Text | VirtualNode[];
@@ -121,12 +128,21 @@ export type VirtualNode = VirtualElement | Text | VirtualNode[];
 export type IProp = {
   children?: VirtualNode[];
 };
-export type FComponentType<T extends IProp = {}> = (prop: T) => VirtualNode;
+export type FComponentType<T extends IProp = {}> = (prop: T) => any;
 export type ComponentType = typeof Component | string | FComponentType;
 
-export type FunctionalValue = () => VirtualNode;
+export type FunctionalValue = () => any;
 
 export type PropertyType = {
   type: "rest" | "normal";
   value: FunctionalValue;
+  property: string;
 };
+
+export type IRenderResult = VirtualElement | Text | any[];
+
+export interface IElement {
+  unmount: () => void;
+  getElements: () => (HTMLElement | Text)[];
+  exec: () => void;
+}
